@@ -12,7 +12,7 @@ set -euo pipefail
 
 git remote add public "$UPSTREAM_DECOUPLED_REPO_REMOTE_URL"
 git fetch public
-git checkout "cms-797-TEST-BRANCH"
+git checkout "cms-797-SYSTEM-TEST-BRANCH"
 
 echo
 echo "-----------------------------------------------------------------------"
