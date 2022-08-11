@@ -66,8 +66,15 @@ for commit in "${commits[@]}"; do
   # git commit --amend --no-edit --author='Pantheon Automation <bot@getpantheon.com>'
 done
 
+echo "Checking out decoupledpatch.sh from main branch."
+git checkout ${CIRCLE_BRANCH} -- devops/scripts/decoupledpatch.sh
+
 echo "Executing decoupledpatch.sh"
-. config/decoupledpatch.sh
+. devops/scripts/decoupledpatch.sh
+
+echo "Removing decoupledpatch.sh"
+rm devops/scripts/decoupledpatch.sh
+
 git add .
 
 echo "Committing changes"
