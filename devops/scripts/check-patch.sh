@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-if git apply config/decoupled.patch ; then
+if `. devops/scripts/decoupledpatch.sh` ; then
     >&2 echo "Patch successful! OK to deploy. After merging PR, push the 'release' branch. See README-internal.md"
 else
     >&2 echo "Patch failed. Please review/resolve the errors in the log and/or create a new patch file if necessary."
