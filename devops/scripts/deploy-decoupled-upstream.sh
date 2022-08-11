@@ -66,7 +66,7 @@ for commit in "${commits[@]}"; do
   # git commit --amend --no-edit --author='Pantheon Automation <bot@getpantheon.com>'
 done
 
-echo "Applying decoupled.patch"
+echo "Executing decoupledpatch.sh"
 . config/decoupledpatch.sh
 git add .
 
