@@ -12,7 +12,7 @@ set -euo pipefail
 
 git remote add public "$UPSTREAM_DECOUPLED_REPO_REMOTE_URL"
 git fetch public
-git checkout "${CIRCLE_BRANCH}"
+git checkout "cms-797-TEST-BRANCH"
 
 echo
 echo "-----------------------------------------------------------------------"
@@ -45,7 +45,7 @@ if [[ ${#commits[@]} -eq 0 ]] ; then
 fi
 
 # Cherry-pick commits not modifying circle config onto the release branch
-git checkout -b public --track public/main
+git checkout -b public --track public/cms-797-TEST-BRANCH
 git pull
 
 if [[ "$CIRCLECI" != "" ]]; then
@@ -78,6 +78,6 @@ echo "Releasing to upstream org"
 echo
 
 # Push to the public repository
-git push public public:main
+git push public public:cms-797-TEST-BRANCH
 
 git checkout $CIRCLE_BRANCH
