@@ -33,9 +33,6 @@ jobs:
           fingerprints:
             - "d6:6c:3e:b6:92:36:04:fc:5a:23:1f:e2:9d:87:00:ef"
       - run:
-          name: Copy commits to destination repo
-          command: devops/scripts/deploy-public-upstream.sh
-      - run:
           name: Apply patch and copy commits to decoupled destination repo
           command: devops/scripts/deploy-decoupled-upstream.sh
   check-commits:
