@@ -47,7 +47,7 @@ fi
 # Copy patch and README file to tmp directory for use after checkout.
 echo "Copying decoupledpatch and decoupledREADME to /tmp for use later."
 cp devops/scripts/decoupledpatch.sh /tmp/decoupledpatch.sh
-cp devops/files/decoupledREADME.md /tmp/README.md
+cp devops/files/decoupledREADME.md /tmp/decoupledREADME.md
 
 # Cherry-pick commits not modifying circle config onto the release branch
 git checkout -b public --track public/cms-797-TEST-BRANCH
