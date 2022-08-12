@@ -72,6 +72,9 @@ done
 echo "Executing decoupledpatch.sh"
 . /tmp/decoupledpatch.sh
 
+echo "Copying README to docroot."
+cp devops/files/decoupledREADME.md ./README.md
+
 git add .
 
 echo "Committing changes"
