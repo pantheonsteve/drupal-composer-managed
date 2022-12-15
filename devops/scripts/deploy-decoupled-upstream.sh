@@ -10,8 +10,13 @@ set -euo pipefail
 
 . devops/scripts/commit-type.sh
 
-git remote add public "$UPSTREAM_DECOUPLED_REPO_REMOTE_URL"
-git fetch public
+# Copy patch and README file to tmp directory for use after checkout.
+echo "Copying decoupledpatch and decoupledREADME to /tmp for use later."
+cp devops/scripts/decoupledpatch.sh /tmp/decoupledpatch.sh
+cp devops/files/decoupledREADME.md /tmp/decoupledREADME.md
+
+git remote add decoupled "$UPSTREAM_DECOUPLED_REPO_REMOTE_URL"
+git fetch decoupled
 git checkout "${CIRCLE_BRANCH}"
 
 echo
@@ -32,8 +37,16 @@ for commit in $newcommits; do
   fi
 
   if [[ $commit_type == "mixed" ]] ; then
-    2>&1 echo "Commit ${commit} contains both release and nonrelease changes. Cannot proceed."
-    exit 1
+    2>&1 echo "Commit ${commit} contains both release and nonrelease changes. Skipping this commit."
+    echo "You may wish to ensure that nothing in this commit is meant for release."
+    delete=(${commit})
+    for remove in "${delete[@]}"; do
+      for i in "${commits[@]}"; do
+        if [ [ ${commits[i]} = $remove ]]; then
+          unset 'commits[i]'
+        fi
+      done
+    done
   fi
 done
 
@@ -44,13 +57,8 @@ if [[ ${#commits[@]} -eq 0 ]] ; then
   exit 1
 fi
 
-# Copy patch and README file to tmp directory for use after checkout.
-echo "Copying decoupledpatch and decoupledREADME to /tmp for use later."
-cp devops/scripts/decoupledpatch.sh /tmp/decoupledpatch.sh
-cp devops/files/decoupledREADME.md /tmp/decoupledREADME.md
-
 # Cherry-pick commits not modifying circle config onto the release branch
-git checkout -b public --track public/main
+git checkout -b decoupled --track decoupled/main
 git pull
 
 if [[ "$CIRCLECI" != "" ]]; then
@@ -86,7 +94,13 @@ echo
 echo "Releasing to upstream org"
 echo
 
-# Push to the public repository
-git push public public:main
+# Push to the decoupled repository
+git push decoupled decoupled:main
 
 git checkout $CIRCLE_BRANCH
+
+# update the decoupled-release-pointer
+git tag -f -m 'Last commit set on upstream repo' decoupled-release-pointer HEAD
+
+# Push decoupled-release-pointer
+git push -f origin decoupled-release-pointer
