@@ -100,6 +100,31 @@ class ComposerScripts {
       putenv('COMPOSER_ROOT_VERSION=dev-main');
     }
 
+    // Apply composer.json up dates
+    $this->applyComposerJsonUpdates($io);
+  }
+
+  /**
+   * postUpdate
+   *
+   * After "composer update" runs, we have the opportunity to do additional
+   * fixups to the project files.
+   *
+   * @param Composer\Script\Event $event
+   *   The Event object passed in from Composer
+   */
+  public static function postUpdate(Event $event) {
+    // for future use
+  }
+
+  /**
+   *
+   */
+  public static function applyComposerJsonUpdates($io) {
+    $composerJsonContents = file_get_contents("composer.json");
+    $composerJson = json_decode($composerJsonContents, true);
+    $originalComposerJson = $composerJson;
+
     // Check to see if the platform PHP version (which should be major.minor.patch)
     // is the same as the Pantheon PHP version (which is only major.minor).
     // If they do not match, force an update to the platform PHP version. If they
@@ -109,9 +134,52 @@ class ComposerScripts {
     $updatedPlatformPhpVersion = static::bestPhpPatchVersion($pantheonPhpVersion);
     if ((substr($platformPhpVersion, 0, strlen($pantheonPhpVersion)) != $pantheonPhpVersion) && !empty($updatedPlatformPhpVersion)) {
       $io->write("<info>Setting platform.php from '$platformPhpVersion' to '$updatedPlatformPhpVersion' to conform to pantheon php version.</info>");
-      $cmd = sprintf('composer config platform.php %s', $updatedPlatformPhpVersion);
-      passthru($cmd);
+
+      $composerJson['config']['platform']['php'] = $updatedPlatformPhpVersion;
     }
+
+    // add a post-update-cmd hook if one is not already defined
+    if(! isset($composerJson['scripts']['post-update-cmd'])) {
+      $io->write("<info>Adding post-update-cmd hook</info>");
+      $composerJson['scripts']['post-update-cmd'] = ['DrupalComposerManaged\\ComposerScripts::postUpdate'];
+    }
+
+    // enable patching if it isn't already enabled
+    if(! isset($composerJson['extra']['enable-patching'])) {
+      $io->write("<info>Setting enable-patching to true</info>");
+      $composerJson['extra']['enable-patching'] = true;
+    }
+
+    // allow phpstan/extension-installer in preparation for Drupal 10
+    if(! isset($composerJson['config']['allow-plugins']['phpstan/extension-installer'])) {
+      $io->write("<info>Allow phpstan/extension-installer in preparation for Drupal 10</info>");
+      $composerJson['config']['allow-plugins']['phpstan/extension-installer'] = true;
+    }
+
+    if(serialize($composerJson) == serialize($originalComposerJson)) {
+      return;
+    }
+
+    // Write the updated composer.json file
+    $composerJsonContents = static::jsonEncodePretty($composerJson);
+    file_put_contents("composer.json", $composerJsonContents . PHP_EOL);
+  }
+
+  /**
+   * jsonEncodePretty
+   *
+   * Convert a nested array into a pretty-printed json-encoded string.
+   *
+   * @param array $data
+   *   The data array to encode
+   * @return string
+   *   The pretty-printed encoded string version of the supplied data.
+   */
+  public static function jsonEncodePretty($data) {
+    $prettyContents = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    $prettyContents = preg_replace('#": \[\s*("[^"]*")\s*\]#m', '": [\1]', $prettyContents);
+
+    return $prettyContents;
   }
 
   /**
