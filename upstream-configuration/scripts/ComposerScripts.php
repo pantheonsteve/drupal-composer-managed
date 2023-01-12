@@ -101,7 +101,7 @@ class ComposerScripts {
     }
 
     // Apply composer.json up dates
-    $this->applyComposerJsonUpdates($io);
+    static::applyComposerJsonUpdates($io);
   }
 
   /**
