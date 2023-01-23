@@ -101,7 +101,7 @@ class ComposerScripts {
     }
 
     // Apply composer.json up dates
-    static::applyComposerJsonUpdates($io);
+    static::applyComposerJsonUpdates($event);
   }
 
   /**
@@ -120,7 +120,9 @@ class ComposerScripts {
   /**
    *
    */
-  public static function applyComposerJsonUpdates($io) {
+  public static function applyComposerJsonUpdates(Event $event) {
+    $io = $event->getIO();
+
     $composerJsonContents = file_get_contents("composer.json");
     $composerJson = json_decode($composerJsonContents, true);
     $originalComposerJson = $composerJson;
