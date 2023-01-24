@@ -173,8 +173,8 @@ class ComposerScripts {
   private static function getPantheonPhpVersion(Event $event) {
     $composer = $event->getComposer();
     $config = $composer->getConfig();
-    $pantheonYmlPath = $config->get('vendor-dir') . '/../pantheon.yml';
-    $pantheonUpstreamYmlPath = $config->get('vendor-dir') . '/../pantheon.upstream.yml';
+    $pantheonYmlPath = dirname($config->get('vendor-dir')) . '/pantheon.yml';
+    $pantheonUpstreamYmlPath = dirname($config->get('vendor-dir')) . '/pantheon.upstream.yml';
 
     if ($pantheonYmlVersion = static::getPantheonConfigPhpVersion($pantheonYmlPath)) {
       return $pantheonYmlVersion;
