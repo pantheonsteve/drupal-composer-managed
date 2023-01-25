@@ -3,17 +3,20 @@
 /**
  * @file
  * Contains \DrupalComposerManaged\ComposerScripts.
+ *
+ * Custom Composer scripts and implementations of Composer hooks.
  */
 
 namespace DrupalComposerManaged;
 
+use Composer\IO\IOInterface;
 use Composer\Script\Event;
-use Composer\Semver\Comparator;
-use Drupal\Core\Site\Settings;
-use DrupalFinder\DrupalFinder;
-use Symfony\Component\Filesystem\Filesystem;
-use Webmozart\PathUtil\Path;
+use Composer\Util\Filesystem;
+use Composer\Util\ProcessExecutor;
 
+/**
+ * Implementation for Composer scripts and Composer hooks.
+ */
 class ComposerScripts {
 
   /**
@@ -37,38 +40,290 @@ class ComposerScripts {
   public static function upstreamRequire(Event $event) {
     $io = $event->getIO();
     $composer = $event->getComposer();
+
+    // This command can only be used in custom upstreams
+    static::failUnlessIsCustomUpstream($io, $composer);
+
+    static::doUpstreamRequire($io, $event->getArguments());
+  }
+
+  /**
+   * Do the upstream require operation
+   */
+  protected static function doUpstreamRequire(IOInterface $io, array $arguments) {
+    $hasNoUpdate = array_search('--no-update', $arguments) !== false;
+    // $hasNoInstall = array_search('--no-install', $arguments) !== false;
+    // Remove --working-dir, --no-update and --no-install, if provided
+    $arguments = array_filter($arguments, function ($item) {
+      return
+        (substr($item, 0, 13) != '--working-dir') &&
+        ($item != '--no-update') &&
+        ($item != '--no-install');
+    });
+    // Escape the arguments passed in.
+    $args = array_map(function ($item) {
+      return escapeshellarg($item);
+    }, $arguments);
+
+    // Run `require` with '--no-update' if there is no composer.lock file,
+    // and without it if there is.
+    $addNoUpdate = $hasNoUpdate || !file_exists('upstream-configuration/composer.lock');
+
+    if ($addNoUpdate) {
+      $args[] = '--no-update';
+    }
+    else {
+      $args[] = '--no-install';
+    }
+
+    // Insert the new projects into the upstream-configuration composer.json
+    // without writing vendor & etc to the upstream-configuration directory.
+    $cmd = "composer --working-dir=upstream-configuration require " . implode(' ', $args);
+    $io->writeError($cmd . PHP_EOL);
+    passthru($cmd, $statusCode);
+
+    if (!$statusCode) {
+      $io->writeError('upstream-configuration/composer.json updated. Commit the upstream-configuration/composer.lock file if you with to lock your upstream dependency versions in sites created from this upstream.');
+    }
+    return $statusCode;
+  }
+
+  /**
+   * Require that the current project is a custom upstream.
+   *
+   * If a user runs this command from a Pantheon site, or from a
+   * local clone of drupal-composer-managed, then an exception
+   * is thrown. If a custom upstream previously forgot to change
+   * the project name, this is a good hint to spur them to perhaps
+   * do that.
+   */
+  protected static function failUnlessIsCustomUpstream(IOInterface $io, $composer) {
     $name = $composer->getPackage()->getName();
     $gitRepoUrl = exec('git config --get remote.origin.url');
 
     // Refuse to run if:
-    //   - This is a clone of the standard Pantheon upstream, and it hasn't been renamed
-    //   - This is an local working copy of a Pantheon site instread of the upstream
-    $isPantheonStandardUpstream = (strpos($name, 'pantheon-systems/drupal-composer-managed') !== false);
+    // a) This is a clone of the standard Pantheon upstream, and it hasn't been renamed
+    // b) This is an local working copy of a Pantheon site instread of the upstream
+    $isPantheonStandardUpstream = preg_match('#pantheon.*/drupal-composer-managed#', $name); // false = failure, 0 = no match
     $isPantheonSite = (strpos($gitRepoUrl, '@codeserver') !== false);
 
-    if ($isPantheonStandardUpstream || $isPantheonSite) {
-      $io->writeError("<info>The upstream-require command can only be used with a custom upstream</info>");
-      $io->writeError("<info>See https://pantheon.io/docs/create-custom-upstream for information on how to create a custom upstream.</info>" . PHP_EOL);
-      throw new \RuntimeException("Cannot use upstream-require command with this project.");
+    if (!$isPantheonStandardUpstream && !$isPantheonSite) {
+      return;
     }
 
-    // Find arguments that look like projects.
-    $packages = [];
-    foreach ($event->getArguments() as $arg) {
-      if (preg_match('#[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9]:*[~^]*[0-9a-z._-]*#', $arg)) {
-        $packages[] = $arg;
+    if ($isPantheonStandardUpstream) {
+      $io->writeError("<info>The upstream-require command can only be used with a custom upstream. If this is a custom upstream, be sure to change the 'name' item in the top-level composer.json file from $name to something else.</info>");
+    }
+
+    if ($isPantheonSite) {
+      $io->writeError("<info>The upstream-require command cannot be used with Pantheon sites. Only use it with custom upstreams. Your git repo URL is $gitRepoUrl.</info>");
+    }
+
+    $io->writeError("<info>See https://pantheon.io/docs/create-custom-upstream for information on how to create a custom upstream.</info>" . PHP_EOL);
+    throw new \RuntimeException("Cannot use upstream-require command with this project.");
+  }
+
+  /**
+   * Update the dependency versions locked in the upstream-configuration section of a custom upstream.
+   *
+   * This creates a composer.lock file in the right location in the
+   * upstream-configuration directory. Once this is committed to the
+   * upstream, then downstream sites that update to this version of the
+   * upstream, then it will get the locked versions of the upstream dependencies.
+   */
+  public static function updateUpstreamDependencies(Event $event) {
+    $io = $event->getIO();
+    $composer = $event->getComposer();
+
+    // This command can only be used in custom upstreams
+    static::failUnlessIsCustomUpstream($io, $composer);
+
+    static::doUpdateUpstreamDependencies($io, static::getCleaner());
+  }
+
+  /**
+   * Do the upstream dependency update operation.
+   */
+  protected static function doUpdateUpstreamDependencies(IOInterface $io, $cleaner) {
+    if (!file_exists("upstream-configuration/composer.json")) {
+      $io->writeError("Upstream has no dependencies; use 'composer upstream-require drupal/modulename' to add some.");
+      return;
+    }
+
+    passthru("composer --working-dir=upstream-configuration update --no-install");
+  }
+
+  /**
+   * Get an object that automatically cleans stuff up at the end of execution.
+   *
+   * We don't have an autoloader set up; otherwise this would just be a
+   * separate class rather than a static accessor that returns an anonymous class.
+   */
+  public static function getCleaner() {
+    return new class() {
+      /** @var array List of files and directories to remove. */
+      private array $fileOrDirList = [];
+      /** @var array Map of files to the content to revert them to. */
+      private array $revertList = [];
+      /** @var bool Flag indicating whether or not we have registered the shutdown function. */
+      private $registered = false;
+
+      /**
+       * Ensure that our cleanup function is called when php shuts down.
+       */
+      private function register() {
+        if ($this->registered) {
+          return;
+        }
+        register_shutdown_function([$this, 'clean']);
+        $this->preventRegistration();
+      }
+
+      /**
+       * Prevents shutdown function registration, e.g. for testing.
+       */
+      public function preventRegistration() {
+        $this->registered = true;
+      }
+
+      /**
+       * Clean up everything that needs to be cleaned.
+       *
+       * Typically, this method will never be called directly by
+       * client code, but it may be directly called by unit tests.
+       */
+      public function clean() {
+        $fs = new Filesystem();
+        foreach ($this->fileOrDirList as $fileOrDir) {
+          $fs->remove($fileOrDir);
+        }
+        foreach ($this->revertList as $file => $contents) {
+          if (file_exists($file) && is_writable($file)) {
+            file_put_contents($file, $contents);
+          }
+        }
+        $this->fileOrDirList = [];
+        $this->revertList = [];
+      }
+
+      /**
+       * Remove the specified file or directory when we clean up.
+       */
+      public function removeWhenDone($fileOrDir) {
+        $this->fileOrDirList[] = $fileOrDir;
+        $this->register();
+      }
+
+      /**
+       * Revert the specified file to the provided contents when we clean up.
+       */
+      public function revertWhenDone($file, $contents = null) {
+        if ($contents === null) {
+          $contents = file_get_contents($file);
+        }
+        $this->revertList[$file] = $contents;
+        $this->register();
+      }
+
+      /**
+       * Create a temporary directory; everything inside it will be deleted
+       * when we clean up.
+       */
+      public function tmpdir($dir, $namePrefix) {
+        $tempfile = tempnam($dir, $namePrefix);
+        // tempnam creates file on disk
+        if (file_exists($tempfile)) {
+          unlink($tempfile);
+        }
+        mkdir($tempfile);
+        if (is_dir($tempfile)) {
+          $this->removeWhenDone($tempfile);
+          return $tempfile;
+        }
+      }
+    };
+  }
+
+  /**
+   * Fix up upstream composer.json with strict pins based on upstream composer.lock file
+   *
+   * This method backs up the upstream-configuration/composer.json file, and
+   * then modifies the version constraints on that file based on the versions in
+   * upstream-configuration/composer.lock. When everything is done, then the
+   * contents of the composer.json file is restored.
+   */
+  protected static function lockUpstreamDependencies($io, $cleaner) {
+    if (!file_exists("upstream-configuration/composer.lock")) {
+      return;
+    }
+    if (!file_exists("composer.lock")) {
+      // This situation typically should not arise in the field, as the platform
+      // commits composer.lock during the site creation process. If there isn't
+      // a top-level composer.lock file, though, then we cannot successfully
+      // apply the upstream dependency locks, because doing so will produce
+      // conflicts unless we can remove the dependencies locked by
+      // drupal/core-recommended.
+      $io->writeError("<warning>Project's composer.lock file not present; upstream lock file IGNORED. Always commit the root-level composer.lock file to Composer-managed Drupal sites. Run 'composer update' again to get correct dependency versions.");
+      return;
+    }
+    $composerLockContents = file_get_contents("upstream-configuration/composer.lock");
+    $composerLockData = json_decode($composerLockContents, true);
+
+    $composerJsonContents = file_get_contents("upstream-configuration/composer.json");
+    $composerJson = json_decode($composerJsonContents, true);
+
+    $cleaner->revertWhenDone("upstream-configuration/composer.json", $composerJsonContents);
+
+    // If there are any packages we want to exclude, list them here.
+    $remove_list = static::listDrupalLockedDependencies();
+
+    if (!isset($composerLockData['packages'])) {
+      return;
+    }
+    $io->writeError('Locking upstream dependencies:');
+
+    // Copy the 'packages' section from the Composer lock into our 'require'
+    // section. There is also a 'packages-dev' section, but we do not need
+    // to pin 'require-dev' versions, as 'require-dev' dependencies are never
+    // included from subprojects. Use 'drupal/core-dev' to get Drupal's
+    // dev dependencies.
+    foreach ($composerLockData['packages'] as $package) {
+      // If there is no 'source' record, then this is a path repository
+      // or something else that we do not want to include.
+      if (isset($package['source']) && !in_array($package['name'], $remove_list)) {
+        $composerJson['require'][$package['name']] = $package['version'];
+        $io->writeError('  "' . $package['name'] . '": "' . $package['version'] .'"');
       }
     }
 
-    // Insert the new projects into the upstream-configuration composer.json
-    // without updating the lock file or downloading the projects
-    $packagesParam = implode(' ', $packages);
-    $cmd = "composer --working-dir=upstream-configuration require --no-update $packagesParam";
-    $io->writeError($cmd . PHP_EOL);
-    passthru($cmd);
+    // Write the updated composer.json file
+    //$composerJsonContents = static::jsonEncodePretty($composerJson);
+    $composerJsonContents = json_encode($composerJson);
+    file_put_contents("upstream-configuration/composer.json", $composerJsonContents . PHP_EOL);
+  }
 
-    // Update composer.lock & etc. if present
-    static::updateLocalDependencies($io, $packages);
+  /**
+   * Determine versions of dependencies locked by Drupal.
+   *
+   * Get the version constraints of all of the dependencies of the
+   * drupal/core-recommended project.
+   */
+  protected static function listDrupalLockedDependencies() {
+    if (!file_exists("composer.lock")) {
+      return [];
+    }
+    $composerLockContents = file_get_contents("composer.lock");
+    $composerLockData = json_decode($composerLockContents, true);
+
+    foreach ($composerLockData['packages'] as $package) {
+      if ($package['name'] == 'drupal/core-recommended') {
+        if (!isset($package['require'])) {
+            return [];
+        }
+        return array_keys($package['require']);
+      }
+    }
+    return [];
   }
 
   /**
@@ -100,7 +355,10 @@ class ComposerScripts {
       putenv('COMPOSER_ROOT_VERSION=dev-main');
     }
 
-    // Apply composer.json up dates
+    // Fix up upstream composer.json with strict pins based on upstream composer.lock file.
+    static::lockUpstreamDependencies($io, static::getCleaner());
+
+    // Apply updates to top-level composer.json
     static::applyComposerJsonUpdates($event);
   }
 
@@ -118,7 +376,12 @@ class ComposerScripts {
   }
 
   /**
+   * Apply composer.json Updates
    *
+   * During the Composer pre-update hook, check to see if there are any
+   * updates that need to be made to the composer.json file. We cannot simply
+   * change the composer.json file in the upstream, because doing so would
+   * result in many merge conflicts.
    */
   public static function applyComposerJsonUpdates(Event $event) {
     $io = $event->getIO();
@@ -161,6 +424,17 @@ class ComposerScripts {
       // so that we don't overwrite customer's changes if they undo these changes.
       // We don't want customers to remove our hook, so it will be re-added if they remove it.
 
+      // Update our upstream convenience scripts, if the user has not removed them
+      if (isset($composerJson['scripts']['upstream-require'])) {
+        // If the 'update-upstream-dependencies' command does not exist yet, add it.
+        if(! isset($composerJson['scripts']['update-upstream-dependencies'])) {
+          $composerJson['scripts']['update-upstream-dependencies'] = 'DrupalComposerManaged\\ComposerScripts::updateUpstreamDependencies';
+          $composerJson['scripts-descriptions'] = [
+            'update-upstream-dependencies' => 'Update the composer.lock file for the upstream dependencies.'
+          ];
+        }
+      }
+
       // enable patching if it isn't already enabled
       if(! isset($composerJson['extra']['enable-patching'])) {
         $io->write("<info>Setting enable-patching to true</info>");
@@ -193,39 +467,11 @@ class ComposerScripts {
    * @return string
    *   The pretty-printed encoded string version of the supplied data.
    */
-  public static function jsonEncodePretty($data) {
+  public static function jsonEncodePretty(array $data) {
     $prettyContents = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     $prettyContents = preg_replace('#": \[\s*("[^"]*")\s*\]#m', '": [\1]', $prettyContents);
 
     return $prettyContents;
-  }
-
-  /**
-   * Update the composer.lock file and so on.
-   *
-   * Upstreams should *not* commit the composer.lock file. If a local working
-   * copy
-   */
-  private static function updateLocalDependencies($io, $packages) {
-    if (!file_exists('composer.lock')) {
-      return;
-    }
-
-    $io->writeError("<warning>composer.lock file present; do not commit composer.lock to a custom upstream, but updating for the purpose of local testing.");
-
-    // Remove versions from the parameters, if any
-    $versionlessPackages = array_map(
-      function ($package) {
-        return preg_replace('/:.*/', '', $package);
-      },
-      $packages
-    );
-
-    // Update the project-level composer.lock file
-    $versionlessPackagesParam = implode(' ', $versionlessPackages);
-    $cmd = "composer update $versionlessPackagesParam";
-    $io->writeError($cmd . PHP_EOL);
-    passthru($cmd);
   }
 
   /**
