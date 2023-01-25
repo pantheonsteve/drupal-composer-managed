@@ -141,7 +141,7 @@ class ComposerScripts {
     }
 
     // add our post-update-cmd hook if it's not already present
-
+    $our_hook = 'DrupalComposerManaged\\ComposerScripts::postUpdate';
     // if does not exist, add as an empty arry
     if(! isset($composerJson['scripts']['post-update-cmd'])) {
       $composerJson['scripts']['post-update-cmd'] = [];
@@ -153,9 +153,9 @@ class ComposerScripts {
     }
 
     // if exists and is an array and does not contain our hook, add our hook (again, only the last check is needed)
-    if(! in_array('Pantheon\\TerminusBuildTools\\Plugin::postUpdate', $composerJson['scripts']['post-update-cmd'])) {
+    if(! in_array($our_hook, $composerJson['scripts']['post-update-cmd'])) {
       $io->write("<info>Adding post-update-cmd hook to composer.json</info>");
-      $composerJson['scripts']['post-update-cmd'][] = 'Pantheon\\TerminusBuildTools\\Plugin::postUpdate';
+      $composerJson['scripts']['post-update-cmd'][] = $our_hook;
     }
 
     // enable patching if it isn't already enabled
