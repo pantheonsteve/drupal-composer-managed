@@ -156,18 +156,22 @@ class ComposerScripts {
     if(! in_array($our_hook, $composerJson['scripts']['post-update-cmd'])) {
       $io->write("<info>Adding post-update-cmd hook to composer.json</info>");
       $composerJson['scripts']['post-update-cmd'][] = $our_hook;
-    }
 
-    // enable patching if it isn't already enabled
-    if(! isset($composerJson['extra']['enable-patching'])) {
-      $io->write("<info>Setting enable-patching to true</info>");
-      $composerJson['extra']['enable-patching'] = true;
-    }
+      // we're making our other changes if and only if we're already adding our hook
+      // so that we don't overwrite customer's changes if they undo these changes.
+      // if they remove our hook, it will be re-added.. we accept this compromise.
 
-    // allow phpstan/extension-installer in preparation for Drupal 10
-    if(! isset($composerJson['config']['allow-plugins']['phpstan/extension-installer'])) {
-      $io->write("<info>Allow phpstan/extension-installer in preparation for Drupal 10</info>");
-      $composerJson['config']['allow-plugins']['phpstan/extension-installer'] = true;
+      // enable patching if it isn't already enabled
+      if(! isset($composerJson['extra']['enable-patching'])) {
+        $io->write("<info>Setting enable-patching to true</info>");
+        $composerJson['extra']['enable-patching'] = true;
+      }
+
+      // allow phpstan/extension-installer in preparation for Drupal 10
+      if(! isset($composerJson['config']['allow-plugins']['phpstan/extension-installer'])) {
+        $io->write("<info>Allow phpstan/extension-installer in preparation for Drupal 10</info>");
+        $composerJson['config']['allow-plugins']['phpstan/extension-installer'] = true;
+      }
     }
 
     if(serialize($composerJson) == serialize($originalComposerJson)) {
