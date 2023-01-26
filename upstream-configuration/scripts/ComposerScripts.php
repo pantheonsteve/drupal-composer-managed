@@ -157,9 +157,9 @@ class ComposerScripts {
       $io->write("<info>Adding post-update-cmd hook to composer.json</info>");
       $composerJson['scripts']['post-update-cmd'][] = $our_hook;
 
-      // we're making our other changes if and only if we're already adding our hook
+      // We're making our other changes if and only if we're already adding our hook
       // so that we don't overwrite customer's changes if they undo these changes.
-      // if they remove our hook, it will be re-added.. we accept this compromise.
+      // We don't want customers to remove our hook, so it will be re-added if they remove it.
 
       // enable patching if it isn't already enabled
       if(! isset($composerJson['extra']['enable-patching'])) {
