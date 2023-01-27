@@ -99,7 +99,7 @@ class UpstreamManagementCommandTest extends TestCase
         $process = $this->composer('info');
         $output = $process->getOutput();
         $this->assertTrue($process->isSuccessful());
-        $this->assertMatchesRegularExpression('#drupal/ctools *4\.0\.2#', $output);
+        $this->assertMatchesRegularExpression('#drupal/ctools *4\.0\.3#', $output);
 
         // Update the upstream dependencies. This should not affect the installed dependencies.
         $this->composer('update-upstream-dependencies');
