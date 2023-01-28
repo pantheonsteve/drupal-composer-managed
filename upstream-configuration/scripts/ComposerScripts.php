@@ -19,9 +19,6 @@ use Composer\Util\ProcessExecutor;
  */
 class ComposerScripts {
 
-  // Only for use in preUpdate / postUpdate hooks.
-  static $updateCleaner = null;
-
   /**
    * Add a dependency to the upstream-configuration section of a custom upstream.
    *
@@ -360,8 +357,7 @@ class ComposerScripts {
     }
 
     // Fix up upstream composer.json with strict pins based on upstream composer.lock file.
-    static::$updateCleaner = static::getCleaner();
-    static::lockUpstreamDependencies($io, static::$updateCleaner);
+    static::lockUpstreamDependencies($io, static::getCleaner());
 
     // Apply updates to top-level composer.json
     static::applyComposerJsonUpdates($event);
@@ -377,12 +373,7 @@ class ComposerScripts {
    *   The Event object passed in from Composer
    */
   public static function postUpdate(Event $event) {
-    if (static::$updateCleaner != null) {
-      // We need to force `clean()` to run here, because sometimes the
-      // shutdown function doesn't run until much later.
-      static::$updateCleaner->clean();
-      static::$updateCleaner = null;
-    }
+    // for future use
   }
 
   /**
