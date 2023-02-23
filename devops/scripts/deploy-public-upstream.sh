@@ -82,7 +82,9 @@ echo "Releasing to upstream org"
 echo
 
 # Push to the public (pantheon-upstreams/drupal-composer-managed) repository
-git push public public:main
+
+## Temporarily halt D9 releases due to failing automation
+#git push public public:main
 
 
 ### Prepare the drupal 10 start state upstream
