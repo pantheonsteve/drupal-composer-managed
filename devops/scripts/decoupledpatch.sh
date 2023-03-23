@@ -4,6 +4,12 @@ SED=`which gsed || which sed`
 
 $SED -i'' 's#"name": "pantheon-upstreams/drupal-composer-managed"#"name": "pantheon-upstreams/decoupled-drupal-composer-managed"#g' composer.json
 
+# Due to a line-duplication bug in older versions of the patch script,
+# we'll start by removing any lines containing the decoupled profile packages
+# before adding them back in.
+$SED -i'' '/drupal\/pantheon_decoupled_umami_demo/d' composer.json
+$SED -i'' '/drupal\/pantheon_decoupled_profile/d' composer.json
+
 # Because the precise spacing and formatting is unknown, new lines
 # need to preserve the previous formatting, so here we duplicate the
 # core-recommended line since the new lines need to come afterward,
