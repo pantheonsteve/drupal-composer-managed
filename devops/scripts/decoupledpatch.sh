@@ -1,5 +1,7 @@
 #!/bin/bash
 
+PACKAGES_VERSION=${1-^1.0}
+
 SED=`which gsed || which sed`
 
 $SED -i'' 's#"name": "pantheon-upstreams/drupal-composer-managed"#"name": "pantheon-upstreams/decoupled-drupal-composer-managed"#g' composer.json
@@ -19,7 +21,7 @@ $SED -i'' -n 'p;s/"drupal\/core-recommended":/PTARGET1&/p' composer.json
 $SED -i'' -n 'p;s/PTARGET1/PTARGET2&/p' composer.json
 
 # Having duplicated the previous lines, we do a standard replace operation.
-$SED -i'' 's#PTARGET2.*#"drupal/pantheon_decoupled_umami_demo": "^1.0",#g' composer.json
-$SED -i'' 's#PTARGET1.*#"drupal/pantheon_decoupled_profile": "^1.0",#g' composer.json
+$SED -i'' "s#PTARGET2.*#\"drupal/pantheon_decoupled_umami_demo\": \"$PACKAGES_VERSION\",#g" composer.json
+$SED -i'' "s#PTARGET1.*#\"drupal/pantheon_decoupled_profile\": \"$PACKAGES_VERSION\",#g" composer.json
 
 $SED -i'' 's#"minimum-stability": "stable"#"minimum-stability": "alpha"#g' composer.json
